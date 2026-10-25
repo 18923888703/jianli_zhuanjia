@@ -22,56 +22,31 @@ type DiagnosisMatchResult = Pick<
 type OptimizeResumeResult = Pick<AnalysisResult, "optimizedItems" | "finalResume">;
 type InterviewResult = Pick<AnalysisResult, "interviewPrep">;
 
-function buildCoreSummary(parts: Partial<DiagnosisMatchResult>): string {
-  const diagnosis = parts.diagnosis;
-  const mainIssues = Array.isArray(diagnosis?.mainIssues) ? diagnosis.mainIssues : [];
-  const prioritySuggestions = Array.isArray(diagnosis?.prioritySuggestions)
-    ? diagnosis.prioritySuggestions
-    : [];
-  const matchItems = Array.isArray(parts.matchItems) ? parts.matchItems : [];
-
-  return [
-    `匹配度：${diagnosis?.overallScore ?? 0}/100`,
-    `主要问题：${mainIssues.slice(0, 3).join("；") || "无"}`,
-    `优先建议：${prioritySuggestions.slice(0, 3).join("；") || "无"}`,
-    `关键缺口：${matchItems
-      .filter((item) => item.needsSupplement)
-      .slice(0, 4)
-      .map((item) => item.jdRequirement)
-      .join("；") || "无"}`,
-  ].join("\n");
-}
-
 export async function runLLMResumeAnalysis(
   input: UserInput,
   optimizeStyle: OptimizeStyle = "ai-product",
   config?: LLMConnectionConfig | null
 ): Promise<AnalysisResult> {
-  const [jd, diagnosisMatch] = await Promise.all([
+  const [jd, diagnosisMatch, optimizeResume, interview] = await Promise.all([
     chatCompletionJSON<JDAnalysisResult>({
       system: RESUME_AGENT_SYSTEM_PROMPT,
       user: buildAnalyzeCorePrompt(input),
-      maxTokens: 3000,
+      maxTokens: 2500,
     }, config),
     chatCompletionJSON<Partial<DiagnosisMatchResult>>({
       system: RESUME_AGENT_SYSTEM_PROMPT,
       user: buildAnalyzeDiagnosisPrompt(input),
-      maxTokens: 4000,
+      maxTokens: 3000,
     }, config),
-  ]);
-
-  const coreSummary = buildCoreSummary(diagnosisMatch);
-
-  const [optimizeResume, interview] = await Promise.all([
     chatCompletionJSON<OptimizeResumeResult>({
       system: RESUME_AGENT_SYSTEM_PROMPT,
-      user: buildAnalyzeOutputPrompt(input, optimizeStyle, coreSummary),
-      maxTokens: 4500,
+      user: buildAnalyzeOutputPrompt(input, optimizeStyle, ""),
+      maxTokens: 3500,
     }, config),
     chatCompletionJSON<InterviewResult>({
       system: RESUME_AGENT_SYSTEM_PROMPT,
-      user: buildAnalyzeInterviewPrompt(input, coreSummary),
-      maxTokens: 3500,
+      user: buildAnalyzeInterviewPrompt(input, ""),
+      maxTokens: 2500,
     }, config),
   ]);
 
