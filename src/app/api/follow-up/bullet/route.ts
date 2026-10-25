@@ -6,7 +6,7 @@ import { generateFollowUpBulletServer } from "@/services/ai/resumeAgent.server";
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as FollowUpBulletRequestBody;
-    const { input, question, purpose, userAnswer } = body;
+    const { input, question, purpose, userAnswer, llmConfig } = body;
 
     if (!userAnswer?.trim()) {
       return NextResponse.json({ error: "请先填写回答" }, { status: 400 });
@@ -16,7 +16,8 @@ export async function POST(request: Request) {
       input,
       question,
       purpose,
-      userAnswer
+      userAnswer,
+      llmConfig
     );
     return NextResponse.json({ bullet, mode });
   } catch (error) {
