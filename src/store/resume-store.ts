@@ -75,9 +75,21 @@ export const useResumeStore = create<ResumeStore>()(
   copied: false,
 
   setUserInput: (input) =>
-    set((state) => ({
-      userInput: { ...state.userInput, ...input },
-    })),
+    set((state) => {
+      const userInput = { ...state.userInput, ...input };
+      const changed = Object.keys(input).some(
+        (key) => userInput[key as keyof UserInput] !== state.userInput[key as keyof UserInput]
+      );
+
+      return changed
+        ? {
+            userInput,
+            analysisResult: null,
+            analysisError: null,
+            currentStep: "input",
+          }
+        : { userInput };
+    }),
 
   loadExampleData: () =>
     set({
@@ -138,6 +150,9 @@ Axure、Figma、SQL、Jira、Confluence、数据分析
 某大学 | 信息管理与信息系统 | 本科 | 2016-2020`,
         additionalInfo: "最近自学了 Prompt Engineering 和 LangChain 基础，做过一个内部文档问答 Demo。希望突出数据产品背景和 ToB 经验，弱化纯执行类描述。",
       },
+      analysisResult: null,
+      analysisError: null,
+      currentStep: "input",
     }),
 
   setCurrentStep: (step) => set({ currentStep: step }),

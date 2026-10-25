@@ -37,8 +37,14 @@ export function InputStep() {
     }
     setAnalyzing(true);
     setAnalysisError(null);
+    const submittedInput = { ...userInput };
     try {
-      const result = await runResumeAnalysis(userInput);
+      const result = await runResumeAnalysis(submittedInput);
+      const latestInput = useResumeStore.getState().userInput;
+      if (JSON.stringify(latestInput) !== JSON.stringify(submittedInput)) {
+        setAnalysisError("分析期间输入材料发生了变化，请使用最新内容重新开始分析。");
+        return;
+      }
       setAnalysisResult(result);
       setCurrentStep("jd-analysis");
     } catch (error) {

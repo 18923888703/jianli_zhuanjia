@@ -13,186 +13,162 @@ const STYLE_LABELS: Record<OptimizeStyle, string> = {
   "tob-saas": "更偏 ToB SaaS",
 };
 
-function buildJDAnalysis(_input: UserInput): AnalysisResult["jdAnalysis"] {
+const JD_HEADING = /^(岗位职责|工作职责|工作内容|职位描述|主要职责|你将负责|responsibilities)\s*[:：]?$/i;
+const REQUIREMENT_HEADING = /^(任职要求|岗位要求|职位要求|任职资格|基本要求|资格要求|加分项|优先条件|qualifications|requirements)\s*[:：]?$/i;
+const BULLET_PREFIX = /^(?:[-*•·▪●‣]|\d+[.、)、]|[（(]\d+[）)])\s*/;
+const STOP_WORDS = ["负责", "具备", "能力", "经验", "要求", "优先", "熟悉", "了解", "能够", "工作", "相关", "以上", "以下", "良好", "优秀", "以及", "进行", "通过", "推动", "支持"];
+
+function splitJD(input: string) {
+  const lines = input
+    .replace(/\r/g, "")
+    .split(/\n+/)
+    .map((line) => line.trim().replace(BULLET_PREFIX, "").trim())
+    .filter(Boolean);
+  const responsibilities: string[] = [];
+  const requirements: string[] = [];
+  let section: "responsibilities" | "requirements" | "other" = "other";
+
+  for (const line of lines) {
+    if (JD_HEADING.test(line)) {
+      section = "responsibilities";
+      continue;
+    }
+    if (REQUIREMENT_HEADING.test(line)) {
+      section = "requirements";
+      continue;
+    }
+    const parts = line.length > 180 ? line.split(/(?<=[。；;])\s*/) : [line];
+    for (const part of parts.map((item) => item.trim()).filter((item) => item.length >= 5)) {
+      if (section === "responsibilities") responsibilities.push(part);
+      else if (section === "requirements") requirements.push(part);
+      else requirements.push(part);
+    }
+  }
+
+  const unique = (items: string[]) => [...new Set(items)].slice(0, 12);
+  const all = unique([...responsibilities, ...requirements]);
   return {
-    responsibilities: [
-      "负责 AI 功能的产品规划与迭代（智能问答、文档理解、工作流自动化）",
-      "深入理解 B 端客户业务场景，将 AI 能力转化为可落地产品方案",
-      "与算法、工程团队协作，推动 AI 功能从 POC 到规模化上线",
-      "建立 AI 产品效果评估体系，数据驱动持续优化",
-      "跟踪 AI 行业趋势，输出竞品分析与产品策略",
-    ],
-    hardRequirements: [
-      "3年以上产品经理经验",
-      "ToB SaaS 或企业服务产品经验",
-      "优秀的需求分析与逻辑思维能力",
-      "良好的跨部门沟通与项目管理能力",
-      "本科及以上学历",
-    ],
-    implicitRequirements: [
-      "具备将传统 B 端系统经验迁移到 AI 场景的能力",
-      "理解 LLM 能力边界，能设计合理的 AI 产品交互",
-      "有数据驱动决策习惯，能量化 AI 功能效果",
-      "对 AI 行业有持续学习意愿与基本认知",
-      "能在资源有限情况下推动 MVP 快速验证",
-    ],
-    keywords: [
-      "AI 产品经理",
-      "LLM",
-      "ToB SaaS",
-      "产品规划",
-      "Prompt",
-      "POC",
-      "数据驱动",
-      "ERP",
-      "WMS",
-      "智能问答",
-      "工作流自动化",
-      "效果评估",
-    ],
-    idealCandidate:
-      "具备 3-5 年 ToB 产品经验，有 ERP/WMS/数据报表等系统落地背景，近期主动学习 AI 并有小范围实践，能将业务抽象能力与 AI 能力结合，推动智能化功能从验证到规模化。",
-    coreCompetencies: [
-      {
-        name: "AI 产品规划",
-        importance: "high",
-        description: "能将 LLM 能力映射到具体业务场景，设计可落地的 AI 功能路线图",
-      },
-      {
-        name: "ToB 需求分析",
-        importance: "high",
-        description: "深入理解企业客户业务流程，将复杂需求抽象为产品方案",
-      },
-      {
-        name: "跨团队协作",
-        importance: "high",
-        description: "协调算法、工程、实施团队，推动 AI 功能从 POC 到上线",
-      },
-      {
-        name: "数据驱动",
-        importance: "medium",
-        description: "建立 AI 效果评估指标，用数据验证产品决策",
-      },
-      {
-        name: "行业认知",
-        importance: "medium",
-        description: "跟踪 AI 行业趋势，具备竞品分析与策略输出能力",
-      },
-      {
-        name: "项目管理",
-        importance: "medium",
-        description: "在资源约束下管理版本迭代与交付节奏",
-      },
-    ],
+    responsibilities: unique(responsibilities.length ? responsibilities : all),
+    requirements: unique(requirements.length ? requirements : all),
   };
 }
 
-function buildDiagnosis(): AnalysisResult["diagnosis"] {
+function extractTerms(text: string) {
+  const english = text.match(/[A-Za-z][A-Za-z0-9+#./-]*/g) ?? [];
+  const chinese: string[] = [];
+  for (const sequence of text.match(/[\u4e00-\u9fff]{2,}/g) ?? []) {
+    for (let size = 2; size <= Math.min(5, sequence.length); size++) {
+      for (let start = 0; start + size <= sequence.length; start++) {
+        const term = sequence.slice(start, start + size);
+        if (!STOP_WORDS.some((stop) => term.includes(stop))) chinese.push(term);
+      }
+    }
+  }
+  const counts = new Map<string, number>();
+  for (const term of [...english, ...chinese]) {
+    const normalized = term.toLowerCase();
+    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .map(([term]) => term)
+    .filter((term, index, allTerms) => !allTerms.some((other, otherIndex) => otherIndex < index && other.includes(term)))
+    .slice(0, 16);
+}
+
+function buildJDAnalysis(input: UserInput): AnalysisResult["jdAnalysis"] {
+  const { responsibilities, requirements } = splitJD(input.jobDescription);
+  const keywords = extractTerms(`${input.targetRole}\n${input.jobDescription}`);
+  const competencies = requirements.slice(0, 5).map((item, index) => ({
+    name: item.length > 22 ? `${item.slice(0, 22)}…` : item,
+    importance: index < 2 ? "high" as const : index < 4 ? "medium" as const : "low" as const,
+    description: `来自当前 JD：${item}`,
+  }));
+
   return {
-    overallScore: 58,
+    responsibilities,
+    hardRequirements: requirements,
+    implicitRequirements: [
+      `候选人需要能用简历中的具体经历证明与“${input.targetRole || "目标岗位"}”相关的要求。`,
+      "面试中应补充职责范围、本人贡献和可验证的结果数据。",
+    ],
+    keywords,
+    idealCandidate: `能用真实经历证明符合「${input.targetRole || "目标岗位"}」JD 的候选人。建议重点准备：${requirements.slice(0, 3).join("；") || "补充 JD 中的核心要求"}`,
+    coreCompetencies: competencies,
+  };
+}
+
+function buildDiagnosis(input: UserInput, matchItems: AnalysisResult["matchItems"]): AnalysisResult["diagnosis"] {
+  const coverage = matchItems.length
+    ? Math.round((matchItems.filter((item) => item.evidenceStrength === "strong" || item.evidenceStrength === "medium").length / matchItems.length) * 100)
+    : 0;
+  const missing = matchItems.filter((item) => item.needsSupplement);
+  const averageLength = input.originalResume.trim().length;
+  const score = Math.max(25, Math.min(95, Math.round(40 + coverage * 0.45 + Math.min(averageLength / 500, 8))));
+  return {
+    overallScore: score,
     dimensionScores: [
       {
         dimension: "岗位匹配度",
-        score: 52,
-        comment: "ToB 与数据产品背景契合，但 AI 相关经历描述不足",
+        score: coverage,
+        comment: `按当前 JD 对照简历文本，约 ${coverage}% 的要求找到中等及以上的文字证据。Mock 模式仅做规则匹配。`,
       },
       {
         dimension: "经历表达",
-        score: 55,
-        comment: "多为功能描述，缺少量化成果与业务影响",
+        score: Math.max(30, Math.min(85, 45 + Math.min((input.originalResume.match(/\d+(?:\.\d+)?%?/g) ?? []).length * 4, 40))),
+        comment: "基于当前简历中的量化数字粗略评估；Mock 模式不会改写经历。",
       },
       {
         dimension: "关键词覆盖",
-        score: 48,
-        comment: "缺少 LLM、Prompt、AI 效果评估等核心关键词",
+        score: coverage,
+        comment: `根据当前 JD 与简历中的词语重合情况估算，待补充要求 ${missing.length} 项。`,
       },
       {
         dimension: "结构完整性",
-        score: 72,
-        comment: "模块齐全，但职业摘要未突出转型动机与 AI 学习",
+        score: Math.max(30, Math.min(85, 45 + Math.min((input.originalResume.match(/\n/g) ?? []).length, 40))),
+        comment: "根据当前简历文本长度和分段数量估算，Mock 模式不理解具体经历语义。",
       },
       {
         dimension: "差异化亮点",
-        score: 50,
-        comment: "ERP/WMS/报表组合有价值，但未与 AI 岗位建立连接",
+        score: Math.max(30, Math.min(85, 45 + Math.min(extractTerms(input.originalResume).length * 2, 40))),
+        comment: "按当前简历中可识别的技能和业务词语数量估算。",
       },
     ],
-    mainIssues: [
-      "简历整体定位偏传统 B 端 PM，未体现 AI 产品转型意图",
-      "工作经历 bullet 缺少 AI/智能化相关表述，关键词匹配度低",
-      "量化数据偏少，部分表述（如 major 版本）不够专业",
-      "补充信息中的 Demo 经验未体现在正文中",
-      "职业摘要未呼应目标 JD 的核心能力要求",
-    ],
-    prioritySuggestions: [
-      "重写职业摘要：突出 ToB + 数据产品背景向 AI 产品转型的路径",
-      "将 WMS 补货、报表平台经历与「数据驱动」「智能化」建立关联",
-      "补充 AI 学习与实践（文档问答 Demo）作为独立项目或技能模块",
-      "每条 bullet 采用「动作 + 方法 + 量化结果」结构重写",
-      "增加与 JD 关键词对齐的能力标签（LLM 应用、Prompt 设计等）",
-    ],
+    mainIssues: missing.length
+      ? missing.slice(0, 5).map((item) => `当前简历未检索到「${item.jdRequirement}」的直接文字证据`)
+      : ["规则匹配未发现明显缺口；仍需人工确认经历是否真实覆盖 JD 要求。"],
+    prioritySuggestions: missing.length
+      ? missing.slice(0, 5).map((item) => `补充能证明「${item.jdRequirement}」的项目、职责或量化结果；没有相关经历时不要臆造。`)
+      : ["检查当前简历中的成果数据、本人贡献和 JD 关键词是否准确。"],
   };
 }
 
-function buildMatchItems(): AnalysisResult["matchItems"] {
-  return [
-    {
-      jdRequirement: "3年以上产品经理经验",
-      resumeEvidence: "3.5年 B 端产品经验，含产品助理至产品经理完整路径",
-      evidenceStrength: "strong",
-      needsSupplement: false,
-      optimizationSuggestion: "在摘要中明确年限与 B 端产品全周期经验",
-    },
-    {
-      jdRequirement: "ToB SaaS 或企业服务产品经验",
-      resumeEvidence: "WMS、ERP、经营数据报表平台，服务 50+ 企业客户",
-      evidenceStrength: "strong",
-      needsSupplement: false,
-      optimizationSuggestion: "强调 SaaS 多租户、标准化交付等企业服务特征",
-    },
-    {
-      jdRequirement: "AI 产品或智能化功能落地经验",
-      resumeEvidence: "WMS 智能补货（基于历史数据的策略模型）",
-      evidenceStrength: "weak",
-      needsSupplement: true,
-      optimizationSuggestion: "将补货策略与 AI/智能化关联；补充文档问答 Demo 项目",
-    },
-    {
-      jdRequirement: "了解 LLM 基本原理",
-      resumeEvidence: "补充信息提到 Prompt Engineering 和 LangChain 学习",
-      evidenceStrength: "weak",
-      needsSupplement: true,
-      optimizationSuggestion: "在技能区增加 LLM/Prompt/LangChain；描述 Demo 具体能力",
-    },
-    {
-      jdRequirement: "数据驱动与效果评估",
-      resumeEvidence: "报表平台月活 200+、报表效率提升 60%、缺货率下降 25%",
-      evidenceStrength: "medium",
-      needsSupplement: false,
-      optimizationSuggestion: "将数据成果与「产品效果评估体系」话术对齐",
-    },
-    {
-      jdRequirement: "ERP/WMS 系统产品经验",
-      resumeEvidence: "ERP 采购模块、WMS 核心模块、库存盘点重构",
-      evidenceStrength: "strong",
-      needsSupplement: false,
-      optimizationSuggestion: "保留并强化，作为差异化竞争优势突出",
-    },
-    {
-      jdRequirement: "跨部门沟通与项目管理",
-      resumeEvidence: "协调研发、测试、实施团队，交付 3 个 major 版本",
-      evidenceStrength: "medium",
-      needsSupplement: false,
-      optimizationSuggestion: "补充具体协作对象（算法/工程等）与交付里程碑",
-    },
-    {
-      jdRequirement: "竞品分析与产品策略",
-      resumeEvidence: "简历中无直接证据",
-      evidenceStrength: "none",
-      needsSupplement: true,
-      optimizationSuggestion: "补充行业调研或竞品分析经历，哪怕是内部报告",
-    },
-  ];
+function buildMatchItems(input: UserInput): AnalysisResult["matchItems"] {
+  const { responsibilities, requirements } = splitJD(input.jobDescription);
+  const lines = input.originalResume
+    .split(/[\n。；;]+/)
+    .map((line) => line.trim().replace(BULLET_PREFIX, ""))
+    .filter((line) => line.length >= 4);
+  const jdItems = [...new Set([...requirements, ...responsibilities])].slice(0, 12);
+
+  return jdItems.map((requirement) => {
+    const terms = extractTerms(requirement).filter((term) => term.length >= 3);
+    const scoredLines = lines
+      .map((line) => ({ line, hits: terms.filter((term) => line.toLowerCase().includes(term.toLowerCase())).length }))
+      .filter((item) => item.hits > 0)
+      .sort((a, b) => b.hits - a.hits);
+    const hits = scoredLines[0]?.hits ?? 0;
+    const evidenceStrength = hits >= 3 ? "strong" : hits >= 2 ? "medium" : hits === 1 ? "weak" : "none";
+    return {
+      jdRequirement: requirement,
+      resumeEvidence: scoredLines[0]?.line ?? "当前简历中未检索到直接文字证据（Mock 规则匹配）",
+      evidenceStrength,
+      needsSupplement: hits < 2,
+      optimizationSuggestion: hits
+        ? `围绕「${requirement}」补充本人职责、行动和可验证结果，当前匹配依据为简历中的原文。`
+        : `检查是否有真实经历可以证明「${requirement}」；没有则不要编造。`,
+    };
+  });
 }
 
 function buildFollowUpQuestions(): AnalysisResult["followUpQuestions"] {
@@ -485,11 +461,12 @@ export async function runMockResumeAnalysis(
   optimizeStyle: OptimizeStyle = "ai-product"
 ): Promise<AnalysisResult> {
   await delay(1800);
+  const matchItems = buildMatchItems(input);
 
   return {
     jdAnalysis: buildJDAnalysis(input),
-    diagnosis: buildDiagnosis(),
-    matchItems: buildMatchItems(),
+    diagnosis: buildDiagnosis(input, matchItems),
+    matchItems,
     followUpQuestions: buildFollowUpQuestions(),
     optimizedItems: buildOptimizedItems(optimizeStyle),
     finalResume: buildFinalResume(input),
