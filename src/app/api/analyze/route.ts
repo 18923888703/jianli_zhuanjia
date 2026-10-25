@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { input, optimizeStyle = "ai-product" } = body;
+  const { input, optimizeStyle = "ai-product", llmConfig } = body;
   if (!input?.targetRole?.trim() || !input?.jobDescription?.trim() || !input?.originalResume?.trim()) {
     return NextResponse.json({ error: "请填写目标岗位、JD 和原始简历" }, { status: 400 });
   }
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       heartbeat = setInterval(() => enqueue(" \n"), 5_000);
 
       try {
-        const { result, mode } = await analyzeResumeServer(input, optimizeStyle);
+        const { result, mode } = await analyzeResumeServer(input, optimizeStyle, llmConfig);
         enqueue(JSON.stringify({ result, mode }));
       } catch (error) {
         const message =
