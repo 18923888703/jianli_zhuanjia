@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useResumeStore } from "@/store/resume-store";
 import { InputStep } from "@/components/steps/input-step";
 import { JDAnalysisStep } from "@/components/steps/jd-analysis-step";
@@ -13,6 +14,18 @@ import { ExportStep } from "@/components/steps/export-step";
 
 export function StepContent() {
   const currentStep = useResumeStore((s) => s.currentStep);
+  const analysisResult = useResumeStore((s) => s.analysisResult);
+  const setCurrentStep = useResumeStore((s) => s.setCurrentStep);
+
+  useEffect(() => {
+    if (!analysisResult && currentStep !== "input") {
+      setCurrentStep("input");
+    }
+  }, [analysisResult, currentStep, setCurrentStep]);
+
+  if (!analysisResult && currentStep !== "input") {
+    return <InputStep />;
+  }
 
   switch (currentStep) {
     case "input":
