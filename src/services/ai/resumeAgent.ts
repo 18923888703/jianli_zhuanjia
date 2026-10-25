@@ -5,6 +5,7 @@ import type {
   OptimizeResponseBody,
 } from "@/lib/ai/types";
 import type { AnalysisResult, FollowUpMessage, OptimizeStyle, UserInput } from "@/types/resume";
+import { getSavedLLMConfig } from "@/lib/ai/connection-config";
 
 export { STYLE_LABELS } from "@/lib/ai/types";
 
@@ -16,10 +17,11 @@ class ResumeAgentClientError extends Error {
 }
 
 async function postJSON<T>(url: string, body: unknown): Promise<T> {
+  const llmConfig = getSavedLLMConfig();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...(body as Record<string, unknown>), ...(llmConfig ? { llmConfig } : {}) }),
   });
 
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
@@ -32,6 +34,14 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
 }
 
 export async function fetchAIStatus() {
+  const localConfig = getSavedLLMConfig();
+  if (localConfig?.apiKey && localConfig.baseUrl && localConfig.model) {
+    return {
+      mode: "llm" as const,
+      model: localConfig.model,
+      provider: localConfig.protocol,
+    };
+  }
   const response = await fetch("/api/ai/status", { cache: "no-store" });
   if (!response.ok) {
     return { mode: "mock" as const };
