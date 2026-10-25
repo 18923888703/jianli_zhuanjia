@@ -24,7 +24,7 @@ function isValidMessages(value: unknown): value is FollowUpMessage[] {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as FollowUpContinueRequestBody;
-    const { input, question, purpose, messages } = body;
+    const { input, question, purpose, messages, llmConfig } = body;
 
     if (!input?.targetRole?.trim() || !input?.originalResume?.trim()) {
       return NextResponse.json({ error: "请先填写目标岗位和原始简历" }, { status: 400 });
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "追问内容不完整，请检查回答后重试" }, { status: 400 });
     }
 
-    const result = await continueFollowUpServer(input, question, purpose, messages);
+    const result = await continueFollowUpServer(input, question, purpose, messages, llmConfig);
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof LLMError
