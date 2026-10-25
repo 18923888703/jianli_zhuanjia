@@ -1,24 +1,35 @@
 import type { AIMode } from "@/lib/ai/types";
+import type { LLMConnectionConfig } from "@/lib/ai/connection-config";
+import { normalizeLLMBaseUrl } from "@/lib/ai/connection-config";
 
 export interface AIConfig {
   mode: AIMode;
   apiKey: string;
   baseUrl: string;
   model: string;
-  provider: string;
+  provider: LLMConnectionConfig["protocol"];
 }
 
-export function getAIConfig(): AIConfig {
-  const apiKey = process.env.LLM_API_KEY?.trim() ?? "";
-  const forceMock = process.env.USE_MOCK_AI === "true";
+export function getAIConfig(override?: LLMConnectionConfig | null): AIConfig {
+  const useOverride = typeof override?.apiKey === "string" && override.apiKey.trim().length > 0;
+  const apiKey = (useOverride ? override?.apiKey : process.env.LLM_API_KEY)?.trim() ?? "";
+  const forceMock = !useOverride && process.env.USE_MOCK_AI === "true";
   const mode: AIMode = !forceMock && apiKey ? "llm" : "mock";
+  const provider = useOverride
+    ? override!.protocol
+    : process.env.LLM_PROVIDER?.trim() === "anthropic"
+      ? "anthropic"
+      : "openai-compatible";
+  const baseUrl = useOverride
+    ? override!.baseUrl
+    : process.env.LLM_BASE_URL?.trim() || "https://api.openai.com/v1";
 
   return {
     mode,
     apiKey,
-    baseUrl: (process.env.LLM_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/$/, ""),
-    model: process.env.LLM_MODEL?.trim() || "gpt-4o-mini",
-    provider: process.env.LLM_PROVIDER?.trim() || "openai-compatible",
+    baseUrl: normalizeLLMBaseUrl(provider, baseUrl),
+    model: (useOverride ? override?.model : process.env.LLM_MODEL)?.trim() || "gpt-4o-mini",
+    provider,
   };
 }
 
