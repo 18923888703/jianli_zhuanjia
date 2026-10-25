@@ -38,17 +38,18 @@ export async function runLLMResumeAnalysis(
   input: UserInput,
   optimizeStyle: OptimizeStyle = "ai-product"
 ): Promise<AnalysisResult> {
-  const jd = await chatCompletionJSON<JDAnalysisResult>({
-    system: RESUME_AGENT_SYSTEM_PROMPT,
-    user: buildAnalyzeCorePrompt(input),
-    maxTokens: 3000,
-  });
-
-  const diagnosisMatch = await chatCompletionJSON<DiagnosisMatchResult>({
-    system: RESUME_AGENT_SYSTEM_PROMPT,
-    user: buildAnalyzeDiagnosisPrompt(input),
-    maxTokens: 4000,
-  });
+  const [jd, diagnosisMatch] = await Promise.all([
+    chatCompletionJSON<JDAnalysisResult>({
+      system: RESUME_AGENT_SYSTEM_PROMPT,
+      user: buildAnalyzeCorePrompt(input),
+      maxTokens: 3000,
+    }),
+    chatCompletionJSON<DiagnosisMatchResult>({
+      system: RESUME_AGENT_SYSTEM_PROMPT,
+      user: buildAnalyzeDiagnosisPrompt(input),
+      maxTokens: 4000,
+    }),
+  ]);
 
   const coreSummary = buildCoreSummary(diagnosisMatch);
 
