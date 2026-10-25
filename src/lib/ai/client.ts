@@ -43,6 +43,10 @@ async function requestChatCompletionJSON<T>(
   const data = await callChatCompletions(config, options);
   const choice = data.choices?.[0];
   const contents = extractMessageContents(choice?.message);
+  if (!contents.length) {
+    const finishReason = choice?.finish_reason ? `（结束原因：${choice.finish_reason}）` : "";
+    throw new LLMError(`模型没有返回最终文本${finishReason}。请检查模型的思考模式或输出长度。`);
+  }
 
   try {
     return parseJSONFromMessage<T>(contents);
@@ -74,6 +78,7 @@ async function callChatCompletions(
   options: ChatCompletionOptions
 ) {
   const anthropic = config.provider === "anthropic";
+  const isDeepSeek = /(^|\.)deepseek\.com$/i.test(new URL(config.baseUrl).hostname);
   const response = await fetch(
     anthropic
       ? `${config.baseUrl}/v1/messages`
@@ -102,6 +107,7 @@ async function callChatCompletions(
               temperature: options.temperature ?? 0.3,
               max_tokens: options.maxTokens ?? 8192,
               response_format: { type: "json_object" },
+            ...(isDeepSeek ? { thinking: { type: "disabled" } } : {}),
               messages: [
                 { role: "system", content: options.system },
                 { role: "user", content: options.user },
