@@ -1,3 +1,5 @@
+import type { LLMConnectionConfig } from "@/lib/ai/connection-config";
+
 export const STYLE_LABELS = {
   concise: "更简洁",
   "reduce-exaggeration": "降低夸张",
@@ -17,11 +19,13 @@ export interface AIStatus {
 export interface AnalyzeRequestBody {
   input: import("@/types/resume").UserInput;
   optimizeStyle?: import("@/types/resume").OptimizeStyle;
+  llmConfig?: LLMConnectionConfig;
 }
 
 export interface OptimizeRequestBody {
   input: import("@/types/resume").UserInput;
   style: import("@/types/resume").OptimizeStyle;
+  llmConfig?: LLMConnectionConfig;
 }
 
 export interface FollowUpBulletRequestBody {
@@ -29,6 +33,7 @@ export interface FollowUpBulletRequestBody {
   question: string;
   purpose: string;
   userAnswer: string;
+  llmConfig?: LLMConnectionConfig;
 }
 
 export interface FollowUpContinueRequestBody {
@@ -36,6 +41,7 @@ export interface FollowUpContinueRequestBody {
   question: string;
   purpose: string;
   messages: import("@/types/resume").FollowUpMessage[];
+  llmConfig?: LLMConnectionConfig;
 }
 
 export interface APIErrorResponse {
