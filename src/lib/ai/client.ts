@@ -1,4 +1,5 @@
 import { getAIConfig } from "@/lib/ai/config";
+import type { LLMConnectionConfig } from "@/lib/ai/connection-config";
 import { LLMError } from "@/lib/ai/errors";
 import { parseJSONFromMessage } from "@/lib/ai/parse-json";
 
@@ -16,18 +17,28 @@ interface ChatMessage {
   reasoning_content?: string | null;
 }
 
-export async function chatCompletionJSON<T>(options: ChatCompletionOptions): Promise<T> {
+export async function chatCompletionJSON<T>(
+  options: ChatCompletionOptions,
+  override?: LLMConnectionConfig | null
+): Promise<T> {
   try {
-    return await requestChatCompletionJSON<T>(options);
+    return await requestChatCompletionJSON<T>(options, override);
   } catch (error) {
     if (error instanceof LLMError) throw error;
     throw new LLMError(error instanceof Error ? error.message : "大模型请求异常");
   }
 }
 
-async function requestChatCompletionJSON<T>(options: ChatCompletionOptions): Promise<T> {
-  const config = getAIConfig();
-  if (!config.apiKey) throw new LLMError("未配置 LLM_API_KEY");
+async function requestChatCompletionJSON<T>(
+  options: ChatCompletionOptions,
+  override?: LLMConnectionConfig | null
+): Promise<T> {
+  const config = getAIConfig(override);
+  if (!config.apiKey) throw new LLMError("尚未配置大模型 API Key，请点击顶部「大模型接入」进行配置");
+  if (!config.baseUrl || !/^https:\/\//i.test(config.baseUrl)) {
+    throw new LLMError("Base URL 必须是有效的 HTTPS 地址");
+  }
+  if (!config.model) throw new LLMError("请填写模型名称");
 
   const data = await callChatCompletions(config, options);
   const choice = data.choices?.[0];
@@ -62,23 +73,43 @@ async function callChatCompletions(
   config: ReturnType<typeof getAIConfig>,
   options: ChatCompletionOptions
 ) {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      temperature: options.temperature ?? 0.3,
-      max_tokens: options.maxTokens ?? 8192,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: options.system },
-        { role: "user", content: options.user },
-      ],
-    }),
-  });
+  const anthropic = config.provider === "anthropic";
+  const response = await fetch(
+    anthropic
+      ? `${config.baseUrl}/v1/messages`
+      : `${config.baseUrl}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(anthropic
+          ? {
+              "x-api-key": config.apiKey,
+              "anthropic-version": "2023-06-01",
+            }
+          : { Authorization: `Bearer ${config.apiKey}` }),
+      },
+      body: JSON.stringify({
+        model: config.model,
+        ...(anthropic
+          ? {
+              max_tokens: options.maxTokens ?? 8192,
+              temperature: options.temperature ?? 0.3,
+              system: options.system,
+              messages: [{ role: "user", content: options.user }],
+            }
+          : {
+              temperature: options.temperature ?? 0.3,
+              max_tokens: options.maxTokens ?? 8192,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: options.system },
+                { role: "user", content: options.user },
+              ],
+            }),
+      }),
+    }
+  );
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
@@ -90,12 +121,25 @@ async function callChatCompletions(
     );
   }
 
-  return (await response.json()) as {
-    choices?: Array<{
-      finish_reason?: string;
-      message?: ChatMessage;
-    }>;
+  const data = (await response.json()) as {
+    choices?: Array<{ finish_reason?: string; message?: ChatMessage }>;
+    content?: Array<{ type?: string; text?: string }>;
+    stop_reason?: string;
   };
+  if (anthropic) {
+    return {
+      choices: [{
+        finish_reason: data.stop_reason,
+        message: {
+          content: data.content
+            ?.filter((block) => block.type === "text")
+            .map((block) => block.text ?? "")
+            .join("\n") ?? "",
+        },
+      }],
+    };
+  }
+  return data;
 }
 
 function extractMessageContents(message?: ChatMessage): string[] {
