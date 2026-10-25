@@ -238,8 +238,17 @@ Axure、Figma、SQL、Jira、Confluence、数据分析
     }),
     {
       name: "resume-expert-memory",
-      version: 1,
+      version: 2,
       skipHydration: true,
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<ResumeStore>;
+        return {
+          ...state,
+          analysisResult: null,
+          analysisError: null,
+          currentStep: "input",
+        } as ResumeStore;
+      },
       partialize: (state) => ({
         userInput: state.userInput,
         currentStep: state.currentStep,
