@@ -21,12 +21,19 @@ type DiagnosisMatchResult = Pick<
 type OptimizeResumeResult = Pick<AnalysisResult, "optimizedItems" | "finalResume">;
 type InterviewResult = Pick<AnalysisResult, "interviewPrep">;
 
-function buildCoreSummary(parts: DiagnosisMatchResult): string {
+function buildCoreSummary(parts: Partial<DiagnosisMatchResult>): string {
+  const diagnosis = parts.diagnosis;
+  const mainIssues = Array.isArray(diagnosis?.mainIssues) ? diagnosis.mainIssues : [];
+  const prioritySuggestions = Array.isArray(diagnosis?.prioritySuggestions)
+    ? diagnosis.prioritySuggestions
+    : [];
+  const matchItems = Array.isArray(parts.matchItems) ? parts.matchItems : [];
+
   return [
-    `匹配度：${parts.diagnosis.overallScore}/100`,
-    `主要问题：${parts.diagnosis.mainIssues.slice(0, 3).join("；") || "无"}`,
-    `优先建议：${parts.diagnosis.prioritySuggestions.slice(0, 3).join("；") || "无"}`,
-    `关键缺口：${parts.matchItems
+    `匹配度：${diagnosis?.overallScore ?? 0}/100`,
+    `主要问题：${mainIssues.slice(0, 3).join("；") || "无"}`,
+    `优先建议：${prioritySuggestions.slice(0, 3).join("；") || "无"}`,
+    `关键缺口：${matchItems
       .filter((item) => item.needsSupplement)
       .slice(0, 4)
       .map((item) => item.jdRequirement)
@@ -44,7 +51,7 @@ export async function runLLMResumeAnalysis(
       user: buildAnalyzeCorePrompt(input),
       maxTokens: 3000,
     }),
-    chatCompletionJSON<DiagnosisMatchResult>({
+    chatCompletionJSON<Partial<DiagnosisMatchResult>>({
       system: RESUME_AGENT_SYSTEM_PROMPT,
       user: buildAnalyzeDiagnosisPrompt(input),
       maxTokens: 4000,
@@ -68,9 +75,16 @@ export async function runLLMResumeAnalysis(
 
   const raw: AnalysisResult = {
     jdAnalysis: jd.jdAnalysis,
-    diagnosis: diagnosisMatch.diagnosis,
-    matchItems: diagnosisMatch.matchItems,
-    followUpQuestions: diagnosisMatch.followUpQuestions,
+    diagnosis: diagnosisMatch.diagnosis ?? {
+      overallScore: 0,
+      dimensionScores: [],
+      mainIssues: [],
+      prioritySuggestions: [],
+    },
+    matchItems: Array.isArray(diagnosisMatch.matchItems) ? diagnosisMatch.matchItems : [],
+    followUpQuestions: Array.isArray(diagnosisMatch.followUpQuestions)
+      ? diagnosisMatch.followUpQuestions
+      : [],
     optimizedItems: optimizeResume.optimizedItems,
     finalResume: optimizeResume.finalResume,
     interviewPrep: interview.interviewPrep,
